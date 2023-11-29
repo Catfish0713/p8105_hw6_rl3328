@@ -110,6 +110,7 @@ model_results |>
 
 # Problem 2
 
+## load data
 ```{r q2_data_cleaning}
 weather_df = 
   rnoaa::meteo_pull_monitors(
@@ -126,7 +127,9 @@ weather_df =
 
 ```
 
-```{r}
+## create 5000 bootstrap samples
+
+```{r bootstrap}
 
 boot_sample = function(df) {
   sample_frac(df, replace = TRUE)
@@ -138,19 +141,15 @@ weather_boot_straps =
     strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
   )
 
-
 boot_straps = 
   tibble(strap_number = 1:5) |> 
   mutate(
     strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
   )
 
-
-
-
 ```
 
-quick check
+## quick check
 ```{r quick_check, include=FALSE}
 weather_boot_straps |> 
   slice(1:3) |> 
@@ -158,19 +157,9 @@ weather_boot_straps |>
   pull(strap_sample)
 ```
 
-```{r lr}
-bootstrap_results = 
-  weather_boot_straps |> 
-  mutate(
-    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = weather_df)),
-    tidy = map(models, broom::tidy),
-    r2 = map(models, ~broom::glance(.) |> pull(r.squared))) |> 
-  select(-strap_sample, -models) |> 
-  unnest(tidy)
+## get estimates
 
-summary(lm(tmax ~ tmin + prcp, data = weather_df))|> pull(r.squared)
-
-
+```{r estimates}
 bootstrap_results = 
   weather_boot_straps |> 
   mutate(
@@ -186,10 +175,49 @@ bootstrap_results =
     names_from = term,
     values_from = estimate) |>
   mutate(log = log(tmin*prcp)) |>
-  select(-tmin,-prcp)
+  select(-tmin,-prcp) |>
+  janitor::clean_names()
   
 
 
 
+a =
+  boot_straps |> 
+  mutate(
+    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    tidy = map(models, broom::tidy),
+    glance = map(models, broom::glance))|> 
+  select(-strap_sample, -models) |> 
+  unnest(c(tidy,glance), names_repair = "universal") |> 
+  select(strap_number,term,r.squared,estimate) |>
+  filter(term !="(Intercept)") |>
+  group_by(strap_number) |>
+        pivot_wider(
+    names_from = term,
+    values_from = estimate)
 ```
 
+## plot the distribution
+
+```{r plot}
+
+r2_dist = bootstrap_results |>
+  ggplot() +
+  geom_histogram(aes(x = r_squared), color = "blue") 
+r2_dist
+ggsave("r2_dist.png")
+
+log_dist = bootstrap_results |>
+  ggplot() +
+  geom_histogram(aes(x = log), color = "red") 
+log_dist
+ggsave("log_dist.png")
+```
+
+Description for the plots:
+
+* r2_dist: the r2 for the 5000 bootstrap samples are approximately normally distributed.The mean or mode of r2 falls around 9.1 and the variance is not large(most of data locates between 0.87 and 0.95). These suggests that a high proportion of variance in the `tmax`  can be explained by `tmin` and `prcp` included in the model.
+
+
+* log_dist: through log transformation, 3288 data (beta1*beta2<0) was excluded; meanwhile, because beta1Xbeta2 is too small(positive), log transformation reduced skewness and made the distribution of this product more symmetrical. But the overall distribution is still left skewed. most of the data falls around -6.These indicates that for more than 3288 samples, `tmin` and `prcp` have opposite effects on `tmax`; for 1822 samples, `tmin` and `prcp` have effects on `tmax`in the same direction. Absolute of beta2 tend to be very small. 
+ 
