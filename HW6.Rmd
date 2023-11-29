@@ -112,6 +112,7 @@ model_results |>
 
 ## load data
 ```{r q2_data_cleaning}
+
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -220,4 +221,34 @@ Description for the plots:
 
 
 * log_dist: through log transformation, 3288 data (beta1*beta2<0) was excluded; meanwhile, because beta1Xbeta2 is too small(positive), log transformation reduced skewness and made the distribution of this product more symmetrical. But the overall distribution is still left skewed. most of the data falls around -6.These indicates that for more than 3288 samples, `tmin` and `prcp` have opposite effects on `tmax`; for 1822 samples, `tmin` and `prcp` have effects on `tmax`in the same direction. Absolute of beta2 tend to be very small. 
- 
+
+
+
+## identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval 
+
+```{r}
+# r2
+
+# get quantiles
+quantiles = round(quantile(pull(bootstrap_results,r_squared), probs = c(0.025, 0.975)),2)
+
+# identify the 2.5% and 97.5% quantiles
+lower_bound <- quantiles[1]  # 2.5% quantile
+upper_bound <- quantiles[2]  # 97.5% quantile
+
+# paste them to create the 95% Confidence Interval
+cat("95% Confidence Interval for r2: [", lower_bound, ", ", upper_bound, "]", sep="")
+
+# log(b1*b2)
+
+# get quantiles
+quantiles2 = round(quantile(pull(bootstrap_results,log), probs = c(0.025, 0.975), na.rm= TRUE),2)
+
+# identify the 2.5% and 97.5% quantiles
+lower_bound2 <- quantiles[1]  # 2.5% quantile
+upper_bound2 <- quantiles[2]  # 97.5% quantile
+
+# paste them to create the 95% Confidence Interval
+cat("95% Confidence Interval for r2: [", lower_bound2, ", ", upper_bound2, "]", sep="")
+```
+
