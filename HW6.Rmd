@@ -29,7 +29,6 @@ theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
 
 ```{r load_libraries}
-library(tidyverse)
 library(modelr)
 ```
 
@@ -38,6 +37,8 @@ library(modelr)
 In the data cleaning code below we create a `city_state` variable, change `victim_age` to numeric, modifiy victim_race to have categories white and non-white, with white as the reference category, and create a `resolution` variable indicating whether the homicide is solved. Lastly, we filtered out the following cities: Tulsa, AL; Dallas, TX; Phoenix, AZ; and Kansas City, MO; and we retained only the variables `city_state`, `resolution`, `victim_age`, `victim_sex`, and `victim_race`.
 
 ```{r q1_data_cleaning}
+
+
 homicide_df = 
   read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) |> 
   mutate(
@@ -90,6 +91,7 @@ model_results =
   filter(term == "victim_sexMale") |> 
   select(city_state, OR, OR_CI_lower, OR_CI_upper)
 
+
 model_results |>
   slice(1:5) |> 
   knitr::kable(digits = 3)
@@ -105,3 +107,89 @@ model_results |>
   geom_errorbar(aes(ymin = OR_CI_lower, ymax = OR_CI_upper)) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
+
+# Problem 2
+
+```{r q2_data_cleaning}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2022-01-01",
+    date_max = "2022-12-31") |>
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) |>
+  select(name, id, everything())
+
+
+```
+
+```{r}
+
+boot_sample = function(df) {
+  sample_frac(df, replace = TRUE)
+}
+
+weather_boot_straps = 
+  tibble(strap_number = 1:5000) |> 
+  mutate(
+    strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
+  )
+
+
+boot_straps = 
+  tibble(strap_number = 1:5) |> 
+  mutate(
+    strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
+  )
+
+
+
+
+```
+
+quick check
+```{r quick_check, include=FALSE}
+weather_boot_straps |> 
+  slice(1:3) |> 
+  mutate(strap_sample = map(strap_sample, arrange, tmin)) |> 
+  pull(strap_sample)
+```
+
+```{r lr}
+bootstrap_results = 
+  weather_boot_straps |> 
+  mutate(
+    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = weather_df)),
+    tidy = map(models, broom::tidy),
+    r2 = map(models, ~broom::glance(.) |> pull(r.squared))) |> 
+  select(-strap_sample, -models) |> 
+  unnest(tidy)
+
+summary(lm(tmax ~ tmin + prcp, data = weather_df))|> pull(r.squared)
+
+
+bootstrap_results = 
+  weather_boot_straps |> 
+  mutate(
+    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    tidy = map(models, broom::tidy),
+    glance = map(models, broom::glance))|> 
+  select(-strap_sample, -models) |> 
+  unnest(c(tidy,glance), names_repair = "universal") |> 
+  select(strap_number,term,r.squared,estimate) |>
+  filter(term !="(Intercept)") |>
+  group_by(strap_number) |>
+        pivot_wider(
+    names_from = term,
+    values_from = estimate) |>
+  mutate(log = log(tmin*prcp)) |>
+  select(-tmin,-prcp)
+  
+
+
+
+```
+
