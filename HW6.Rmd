@@ -216,7 +216,7 @@ ggsave("log_dist.png")
 
 Description for the plots:
 
-* r2_dist: the r2 for the 5000 bootstrap samples are approximately normally distributed.The mean or mode of r2 falls around 9.1 and the variance is not large(most of data locates between 0.87 and 0.95). These suggests that a high proportion of variance in the `tmax`  can be explained by `tmin` and `prcp` included in the model.
+* r2_dist: the r2 for the 5000 bootstrap samples are approximately normally distributed.The mean or mode of r2 falls around 9.1 and the variance is not large(most of data locates between 0.87 and 0.95). These suggests that a high proportion of variance in the `tmax`  can be explained by `tmin` and `prcp` included in the model.The relatively tight clustering of r2 values also suggests that the underlying data are likely to be of high quality with strong linear relationships.
 
 
 * log_dist: through log transformation, 3288 data (beta1*beta2<0) was excluded; meanwhile, because beta1Xbeta2 is too small(positive), log transformation reduced skewness and made the distribution of this product more symmetrical. But the overall distribution is still left skewed. most of the data falls around -6.These indicates that for more than 3288 samples, `tmin` and `prcp` have opposite effects on `tmax`; for 1822 samples, `tmin` and `prcp` have effects on `tmax`in the same direction. Absolute of beta2 tend to be very small. 
