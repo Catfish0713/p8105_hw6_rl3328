@@ -252,3 +252,198 @@ upper_bound2 <- quantiles[2]  # 97.5% quantile
 cat("95% Confidence Interval for r2: [", lower_bound2, ", ", upper_bound2, "]", sep="")
 ```
 
+# Problem 3
+
+```{r load_libs}
+library(stats)
+library(car)
+```
+
+## Data cleaning
+
+```{r clean_data}
+bw = read_csv("data/birthweight.csv")
+sum(is.na(bw)) # there's no missing value
+
+# Convert some numeric variables to factors
+bw <- bw |>
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), labels = c("male", "female")),
+    frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
+    malform = factor(malform, levels = c(0, 1), labels = c("absent", "present")),
+    mrace = factor(mrace, levels = c(1, 2, 3, 4, 8), labels = c("White", "Black", "Asian", "Puerto Rican", "Other"))
+  )
+
+```
+
+## build up the regression model using stepwise method
+
+```{r}
+full_model <- lm(bwt ~ ., data = bw)
+stepwise_model <- step(full_model, direction = "both")
+summary(stepwise_model)
+
+```
+
+
+
+## model diagnostics1
+
+```{r}
+# Add predictions and residuals to the data
+bw_diagnostic1 <- bw |>
+  add_predictions(stepwise_model) |>
+  add_residuals(stepwise_model)
+
+# Plot model residuals against fitted values
+bw_diagnostic1 |> ggplot( aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    x = "Fitted Values",
+    y = "Residuals",
+    title = "Residuals vs. Fitted Values"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red")
+
+```
+* I first fit an initial full regression model including all potential predictors listed. Then I applied a stepwise regression approach with both direction to select a set of variables that contribute meaningfully to the model according to AIC. I drew a residual vs. fit plot, which indicates that the stepwise model's residuals spread randomly around the horizontal line at 0 (the red dashed line) and have no pattern. But I detected assumption violation of heteroscedasticity and some potential influential outliers. 
+So, I tried to transform the bwt into log/square root(bwt) to see if this fix the heteroscedasticity.
+
+## transform bwt into log format and repeat the modeling process 
+```{r}
+# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
+
+log_full_model <- lm(log(bwt) ~ ., data = bw)
+log_stepwise_model <- step(log_full_model, direction = "both")
+summary(log_stepwise_model)
+
+```
+
+## model diagnostics2
+
+```{r}
+# Add predictions and residuals to the data
+bw_diagnostic2 <- bw |>
+  add_predictions(log_stepwise_model) |>
+  add_residuals(log_stepwise_model)
+
+# Plot model residuals against fitted values
+bw_diagnostic2 |> ggplot( aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    x = "Fitted Values",
+    y = "Residuals",
+    title = "Residuals vs. Fitted Values"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red")
+
+```
+
+
+
+
+# check multicollinearity
+```{r}
+vif_results <- vif(log_stepwise_model) 
+print(vif_results)
+
+```
+Acorrding to the results of VIF analysis and my knowlege, there's relationship between bhead and blength,delwt and ppwt. I would like to keep bhead and ppwt in my model and delete the other two covariates.
+
+## modify the model based on my knowledge
+
+```{r}
+my_model = update(log_stepwise_model, . ~ . - blength - delwt)
+summary(my_model)
+
+```
+
+## model diagnostics 3
+```{r}
+# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
+
+# Add predictions and residuals to the data
+bw_diagnostic3 <- bw |>
+  add_predictions(my_model) |>
+  add_residuals(my_model)
+
+# Plot model residuals against fitted values
+bw_diagnostic3 |> ggplot( aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    x = "Fitted Values",
+    y = "Residuals",
+    title = "Residuals vs. Fitted Values"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red")
+
+```
+
+* According to the plot, this model seems good with no violation of assumption, but still have some outliers/influential points.
+
+## identify potential outliers or influential points
+
+```{r}
+influencePlot(my_model)
+```
+* According to studentized residual(absolute StudRes > 2), point 1477,1748 and 2691 are outliers.
+* According to leverage/Hat value(>3*(p/n)=0.0083),point 1,1477,1993,2691 are outliers.
+* According to Cook's distance(>1),
+
+* Outliers: Observations 1477, 1748, and 2691 are likely outliers.
+* Influential Points: Observations 1477 and 1748 are likely influential due to their high Cook's distances. Observation 1993 could also be influential due to its very high leverage, even though it's not an outlier by the residual criterion.
+
+
+## remove point 1477 and 1748 from the observations
+```{r}
+# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
+bw = bw[-c(1477,1748),]
+
+log_full_model <- lm(log(bwt) ~ ., data = bw)
+log_stepwise_model <- step(log_full_model, direction = "both")
+log_mymodel = update(log_stepwise_model, . ~ . - blength - delwt)
+summary(log_mymodel)
+```
+
+* After removing the influential points, the coefficient of fincome experienced significant change, and the direction altered(from negative value to positive value), which makes more sense igven common sense.
+
+## model diagnostics 4
+```{r}
+# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
+
+# Add predictions and residuals to the data
+bw_diagnostic4 <- bw |>
+  add_predictions(log_mymodel) |>
+  add_residuals(log_mymodel)
+
+# Plot model residuals against fitted values
+bw_diagnostic4 |> ggplot( aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    x = "Fitted Values",
+    y = "Residuals",
+    title = "Residuals vs. Fitted Values"
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red")
+
+
+influencePlot(log_mymodel)
+```
+
+* Although there's still influential outliers, I won't remove them any longer.(removing point 2689 didn't change the model so much)
+
+## model comparison
+
+### model 1
+```{r}
+model_length_gestage <- lm(bwt ~ blength + gaweeks, data = bw)
+
+
+model_head_length_sex_interactions <- lm(bwt ~ bhead * blength * babysex, data = bw)
+```
+
+### model 2
