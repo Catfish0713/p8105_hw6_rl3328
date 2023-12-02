@@ -1,4 +1,10 @@
 ---
+title: "my_model"
+author: "Ruixi Li"
+date: "2023-12-01"
+output: html_document
+---
+---
 title: "p8105_hw6_rl3328"
 author: "Ruixi Li"
 date: "2023-11-28"
@@ -89,7 +95,7 @@ model_results |>
 # Problem 2
 
 ## load data
-```{r q2_data_cleaning}
+```{r q2_data_cleaning, message=FALSE}
 
 weather_df = 
   rnoaa::meteo_pull_monitors(
@@ -120,11 +126,6 @@ weather_boot_straps =
     strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
   )
 
-boot_straps = 
-  tibble(strap_number = 1:5) |> 
-  mutate(
-    strap_sample = map(strap_number, \(i) boot_sample(df = weather_df))
-  )
 
 ```
 
@@ -157,23 +158,6 @@ bootstrap_results =
   select(-tmin,-prcp) |>
   janitor::clean_names()
   
-
-
-
-a =
-  boot_straps |> 
-  mutate(
-    models = map(strap_sample, \(df) lm(tmax ~ tmin + prcp, data = df)),
-    tidy = map(models, broom::tidy),
-    glance = map(models, broom::glance))|> 
-  select(-strap_sample, -models) |> 
-  unnest(c(tidy,glance), names_repair = "universal") |> 
-  select(strap_number,term,r.squared,estimate) |>
-  filter(term !="(Intercept)") |>
-  group_by(strap_number) |>
-        pivot_wider(
-    names_from = term,
-    values_from = estimate)
 ```
 
 ## plot the distribution
@@ -234,6 +218,7 @@ cat("95% Confidence Interval for r2: [", lower_bound2, ", ", upper_bound2, "]", 
 
 ```{r load_libs}
 library(stats)
+library(car)
 ```
 
 ## Data cleaning
@@ -284,27 +269,36 @@ bw_diagnostic1 |> ggplot( aes(x = pred, y = resid)) +
 
 ```
 * I first fit an initial full regression model including all potential predictors listed. Then I applied a stepwise regression approach with both direction to select a set of variables that contribute meaningfully to the model according to AIC. I drew a residual vs. fit plot, which indicates that the stepwise model's residuals spread randomly around the horizontal line at 0 (the red dashed line) and have no pattern. But I detected assumption violation of heteroscedasticity and some potential influential outliers. 
-So, I tried to transform the bwt into log(bwt) to see if this fix the heteroscedasticity.
 
-## transform bwt into log format and repeat the modeling process 
+
+# check multicollinearity
 ```{r}
+vif_results <- vif(stepwise_model) 
+print(vif_results)
+cor(bw$bhead,bw$blength)
+cor(bw$delwt,bw$ppwt)
+# get the original bw
+bw_numeric = bw |> select(-frace,-mrace,-babysex,-malform,-bwt)
+corr_matrix = cor(bw_numeric) #delwt and ppwt have high correlation; bhead and blength have high correlation
+```
+Acorrding to the results of VIF analysis and my knowlege, there's relationship between bhead and blength,delwt and ppwt. I would like to keep bhead and ppwt in my model and delete the other two covariates.
 
-log_full_model <- lm(log(bwt) ~ ., data = bw)
-log_stepwise_model <- step(log_full_model, direction = "both")
-summary(log_stepwise_model)
+## modify the model based on my knowledge
+
+```{r}
+my_model = update(stepwise_model, . ~ . - blength - delwt)
+summary(my_model)
 
 ```
 
-## model diagnostics2
-
+## model diagnostics 2
 ```{r}
 # remember to rerun previous code chunk `clean_data` to get the original bw dataframe
 
-
 # Add predictions and residuals to the data
 bw_diagnostic2 <- bw |>
-  add_predictions(log_stepwise_model) |>
-  add_residuals(log_stepwise_model)
+  add_predictions(my_model) |>
+  add_residuals(my_model)
 
 # Plot model residuals against fitted values
 bw_diagnostic2 |> ggplot( aes(x = pred, y = resid)) +
@@ -319,28 +313,37 @@ bw_diagnostic2 |> ggplot( aes(x = pred, y = resid)) +
 
 ```
 
+* According to the plot, this model seems good with no violation of assumption, but still have some outliers/influential points.
 
+## identify potential outliers or influential points
 
-
-# check multicollinearity
 ```{r}
-vif_results <- vif(log_stepwise_model) 
-print(vif_results)
-cor(bw$bhead,bw$blength)
-cor(bw$delwt,bw$ppwt)
-# get the original bw
-bw_numeric = bw |> select(-frace,-mrace,-babysex,-malform,-bwt)
-corr_matrix = cor(bw_numeric) #delwt and ppwt have high correlation; bhead and blength have high correlation
+influencePlot(my_model)
 ```
-Acorrding to the results of VIF analysis and my knowlege, there's relationship between bhead and blength,delwt and ppwt. I would like to keep bhead and ppwt in my model and delete the other two covariates.
+* According to studentized residual(absolute StudRes > 2), point 656, 1477, 4049 are outliers.
+* According to leverage/Hat value(>3*(p/n)=0.0083),point 1,656,1477,1993 have extrme x values.
+* According to Cook's distance(D(i) > 4/n=0.001 not a cutoff), 656, 1477 and 4049 point have larger CookD,more likely to be influential but still<0.5. 
 
-## modify the model based on my knowledge
+* Outliers: Observations 656, 1477 and 4049 are likely outliers.
+* Influential Points: Observations 656 and 1477 are likely influential due to their high Cook's distances. Observation 1993 could also be influential due to its very high leverage, even though it's not an outlier by the residual criterion.
 
+
+## remove point 656, 1477, 4049 from the observations
 ```{r}
-my_model = update(log_stepwise_model, . ~ . - blength - delwt)
+# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
+bw = bw[-c(656,1477,4049),]
+
+full_model <- lm(bwt ~ ., data = bw)
+stepwise_model <- step(full_model, direction = "both")
+my_model = update(stepwise_model, . ~ . - blength - delwt)
 summary(my_model)
 
+influencePlot(my_model)
+bw = bw[-c(2463),]
+
 ```
+
+* After removing the influential points, the coefficient of fincome experienced significant change, and the direction altered(from negative value to positive value), which makes more sense given common sense.
 
 ## model diagnostics 3
 ```{r}
@@ -362,62 +365,10 @@ bw_diagnostic3 |> ggplot( aes(x = pred, y = resid)) +
   ) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red")
 
-```
-
-* According to the plot, this model seems good with no violation of assumption, but still have some outliers/influential points.
-
-## identify potential outliers or influential points
-
-```{r}
-influencePlot(my_model)
-```
-* According to studentized residual(absolute StudRes > 2), point 1477,1748 and 2691 are outliers.
-* According to leverage/Hat value(>3*(p/n)=0.0083),point 1,1477,1993,2691 have extrme x values.
-* According to Cook's distance(D(i) > 4/n=0.001 not a cutoff), 1477 and 2691 point have larger CookD,more likely to be influential but still<0.5. 
-
-* Outliers: Observations 1477, 1748, and 2691 are likely outliers.
-* Influential Points: Observations 1477 and 1748 are likely influential due to their high Cook's distances. Observation 1993 could also be influential due to its very high leverage, even though it's not an outlier by the residual criterion.
-
-
-## remove point 1477, 1748 and 1993 from the observations
-```{r}
-# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
-bw = bw[-c(1477,1748,1993),]
-
-log_full_model <- lm(log(bwt) ~ ., data = bw)
-log_stepwise_model <- step(log_full_model, direction = "both")
-log_mymodel = update(log_stepwise_model, . ~ . - blength - delwt)
-summary(log_mymodel)
-
-
-```
-
-* After removing the influential points, the coefficient of fincome experienced significant change, and the direction altered(from negative value to positive value), which makes more sense given common sense.
-
-## model diagnostics 4
-```{r}
-# remember to rerun previous code chunk `clean_data` to get the original bw dataframe
-
-# Add predictions and residuals to the data
-bw_diagnostic4 <- bw |>
-  add_predictions(log_mymodel) |>
-  add_residuals(log_mymodel)
-
-# Plot model residuals against fitted values
-bw_diagnostic4 |> ggplot( aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.5) +
-  theme_bw() +
-  labs(
-    x = "Fitted Values",
-    y = "Residuals",
-    title = "Residuals vs. Fitted Values"
-  ) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red")
-
-residuals = resid(log_mymodel)
+residuals = resid(my_model)
 hist(residuals)# residual is normally-distributed
 
-influencePlot(log_mymodel)
+
 ```
 
 * Although there's still influential outliers, I won't remove them any longer.(removing point 2689 didn't change the model so much)
@@ -426,73 +377,181 @@ influencePlot(log_mymodel)
 ```{r}
 library(caret)
 library(purrr)
-library(Metrics)
 ```
 
-### model 1
-```{r}
-model_length_gestage <- lm(log(bwt) ~ blength + gaweeks, data = bw)
+I used original bw dataframe here. But I will use the dw after deleting influential points for further comparison.
 
-# Add predictions and residuals to the data
-bw_diagnostic5 <- bw |>
-  add_predictions(model_length_gestage) |>
-  add_residuals(model_length_gestage)
-
-# Plot model residuals against fitted values
-bw_diagnostic5 |> ggplot( aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.5) +
-  theme_bw() +
-  labs(
-    x = "Fitted Values",
-    y = "Residuals",
-    title = "Residuals vs. Fitted Values"
-  ) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "red")
-
-```
-
-* the residuals vs. fitted value plot shows that lm(bwt ~ blength +gaweeks)[not shown here, but I save this plot as "model1.png"] has heteroscedasticity, but lm(bwt ~ blength +gaweeks) doesn't violate the assumption["model1_log.png"].-I used original bw dataframe here. But I will use the dw after deleting influential points for further comparison.
+### split bw for 100-fold cross-validation
 
 ```{r}
 set.seed(123) # for reproducibility
-folds <- crossv_mc(bw, 10) # for 100-fold cross-validation
+folds <- crossv_mc(bw, 100) # for 100-fold cross-validation
+```
 
-calculate_cv_error <- function(data, formula, fold) {
-  # Subset the data for training and testing based on the fold indices
-  train_data <- data[fold$train, ]
-  test_data <- data[fold$test, ]
+### my_model
+```{r}
 
-  # Fit the model using the subsetted training data
-  model <- lm(formula, data = train_data)
+# given a dataframe and a formula, return a model
+fn_model <- function(df){
+  lm(bwt ~ babysex + bhead + fincome + gaweeks + mheight + mrace + ppwt + smoken, data = df)
+}
 
-  # Make predictions on the test set and calculate errors
-  predictions <- predict(model, newdata = test_data)
-  rmse_value <- RMSE(predictions, test_data$bwt)
-  mae_value <- MAE(predictions, test_data$bwt)
-  r2_value <- cor(predictions, test_data$bwt)^2
+# get models for all resamples in train dataset 
+folds_my_model <-
+  folds %>%
+  mutate(model = map(train, fn_model)) %>%
+  print()
 
-  return(data.frame(RMSE = rmse_value, MAE = mae_value, R2 = r2_value))
+
+# calculate pre, resp,resid
+sample_prediction <- function(model, sample){
+  
+  df <- as.data.frame(sample)
+  
+  pred <- stats::predict(model, df)
+  
+  
 }
 
 
-# Define the model formulas
-current_model_formula <- log(bwt) ~ babysex + bhead + fincome + gaweeks + mheight + mrace + ppwt + smoken
-length_ga_model_formula <- log(bwt) ~ blength + gaweeks
 
-# Applying the function to each fold
-current_model_errors <- map_dfr(folds, ~ calculate_cv_error(bw, current_model_formula, .x))
-length_ga_model_errors <- map_dfr(folds, ~ calculate_cv_error(bw, length_ga_model_formula, .x))
+sample_response <- function(model, sample){
+  
+  df <- as.data.frame(sample)
+  
+  var_response <- all.vars(formula(model))[[1]]
+  
+  df[[var_response]]
+}
+
+####### those two functions above can be used repeatedly
+
+folds_my_resid <- 
+  folds_my_model %>%
+  gather(key = split, value = data, train, test) %>%
+  mutate(
+    pred = map2(model, data, sample_prediction),
+    resp = map2(model, data, sample_response),
+    resid = map2(pred, resp, `-`)
+  ) %>%
+  select(.id, split, pred, resp, resid) %>%
+  unnest(cols = c(pred, resp, resid)) %>%
+  print()
+
+# calculate rmse
+folds_my_rmse <- 
+  folds_my_resid %>%
+  group_by(.id, split) %>%
+  summarize(
+    rmse = sqrt(sum(resid*resid)/length(resid))
+  ) %>%
+  ungroup() %>%
+  print()
 
 
+```
 
-# Summarize the results
-current_model_summary <- summary(current_model_errors)
-length_ga_model_summary <- summary(length_ga_model_errors)
+### model1
+```{r}
+
+# given a dataframe, return a model
+fn_model <- function(df){
+  lm(bwt ~ blength + gaweeks, data = df)
+}
+
+# get models for all resamples using train datasets
+folds_model1 <-
+  folds %>%
+  mutate(model = map(train, fn_model)) %>%
+  print()
 
 
-model_head_length_sex_interactions <- lm(bwt ~ bhead * blength * babysex, data = bw)
+folds_one_resid <- 
+  folds_model1 %>%
+  gather(key = split, value = data, train, test) %>%
+  mutate(
+    pred = map2(model, data, sample_prediction),
+    resp = map2(model, data, sample_response),
+    resid = map2(pred, resp, `-`)
+  ) %>%
+  select(.id, split, pred, resp, resid) %>%
+  unnest(cols = c(pred, resp, resid)) %>%
+  print()
+
+# calculate rmse
+folds_one_rmse <- 
+  folds_one_resid %>%
+  group_by(.id, split) %>%
+  summarize(
+    rmse = sqrt(sum(resid*resid)/length(resid))
+  ) %>%
+  ungroup() %>%
+  print()
+```
+
+### model 2
+
+```{r}
+
+# given a dataframe, return a model
+fn_model <- function(df){
+  lm(bwt ~ bhead * blength * babysex, data = df)
+}
+
+# get models for all resamples using train datasets
+folds_model2 <-
+  folds %>%
+  mutate(model = map(train, fn_model)) %>%
+  print()
+
+
+folds_two_resid <- 
+  folds_model2 %>%
+  gather(key = split, value = data, train, test) %>%
+  mutate(
+    pred = map2(model, data, sample_prediction),
+    resp = map2(model, data, sample_response),
+    resid = map2(pred, resp, `-`)
+  ) %>%
+  select(.id, split, pred, resp, resid) %>%
+  unnest(cols = c(pred, resp, resid)) %>%
+  print()
+
+# calculate rmse
+folds_two_rmse <- 
+  folds_two_resid %>%
+  group_by(.id, split) %>%
+  summarize(
+    rmse = sqrt(sum(resid*resid)/length(resid))
+  ) %>%
+  ungroup() %>%
+  print()
+```
+
+### combine the three datasets together to visualize the differences
+```{r}
+resid = bind_rows(my_model = folds_my_resid, model1 = folds_one_resid, model2 = folds_two_resid,.id = "model") 
+
+ggplot(resid, aes(x = resid, color = split, group = paste(split, .id))) +
+  stat_density(
+    aes(y = ..density..), 
+    geom = "line", 
+    position = "identity",
+    alpha = 0.3
+  ) + facet_grid(.~model)
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
+  
+rmse = bind_rows(my_model = folds_my_rmse, model1 = folds_one_rmse, model2 = folds_two_rmse,.id = "model")
+
+rmse %>%
+  ggplot(aes(x = model, y = rmse, color = split, group = split)) +
+  stat_summary(geom = "line", fun = "median") +
+  geom_point(
+    position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.5),
+    alpha = 0.5
+  ) +
+  ylim(0, NA) +
+  guides(color = guide_legend(override.aes = list(alpha = 1)))
 ```
 
 
-
-### model 2
