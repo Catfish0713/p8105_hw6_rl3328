@@ -4,12 +4,6 @@ author: "Ruixi Li"
 date: "2023-12-01"
 output: html_document
 ---
----
-title: "p8105_hw6_rl3328"
-author: "Ruixi Li"
-date: "2023-11-28"
-output: html_document
----
 
 ```{r setup, include=FALSE}
 library(tidyverse)
@@ -139,7 +133,7 @@ weather_boot_straps |>
 
 ## get estimates
 
-```{r estimates}
+```{r estimates, message=FALSE}
 bootstrap_results = 
   weather_boot_straps |> 
   mutate(
@@ -162,17 +156,19 @@ bootstrap_results =
 
 ## plot the distribution
 
-```{r plot}
+```{r plot, message=FALSE}
 
 r2_dist = bootstrap_results |>
   ggplot() +
-  geom_histogram(aes(x = r_squared), color = "blue") 
+  geom_histogram(aes(x = r_squared), color = "blue") +
+  ggtitle("Distribution of R^2")
 r2_dist
 ggsave("r2_dist.png")
 
 log_dist = bootstrap_results |>
   ggplot() +
-  geom_histogram(aes(x = log), color = "red") 
+  geom_histogram(aes(x = log), color = "red") +
+  ggtitle("Distribution of log(beta1*beta2)")
 log_dist
 ggsave("log_dist.png")
 ```
@@ -185,7 +181,6 @@ Description for the plots:
 * log_dist: through log transformation, 3288 data (beta1*beta2<0) was excluded; meanwhile, because beta1Xbeta2 is too small(positive), log transformation reduced skewness and made the distribution of this product more symmetrical. But the overall distribution is still left skewed. most of the data falls around -6.These indicates that for more than 3288 samples, `tmin` and `prcp` have opposite effects on `tmax`; for 1822 samples, `tmin` and `prcp` have effects on `tmax`in the same direction. Absolute of beta2 tend to be very small. 
 
 
-
 ## identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval 
 
 ```{r}
@@ -195,8 +190,8 @@ Description for the plots:
 quantiles = round(quantile(pull(bootstrap_results,r_squared), probs = c(0.025, 0.975)),2)
 
 # identify the 2.5% and 97.5% quantiles
-lower_bound <- quantiles[1]  # 2.5% quantile
-upper_bound <- quantiles[2]  # 97.5% quantile
+lower_bound = quantiles[1]  # 2.5% quantile
+upper_bound = quantiles[2]  # 97.5% quantile
 
 # paste them to create the 95% Confidence Interval
 cat("95% Confidence Interval for r2: [", lower_bound, ", ", upper_bound, "]", sep="")
@@ -207,8 +202,8 @@ cat("95% Confidence Interval for r2: [", lower_bound, ", ", upper_bound, "]", se
 quantiles2 = round(quantile(pull(bootstrap_results,log), probs = c(0.025, 0.975), na.rm= TRUE),2)
 
 # identify the 2.5% and 97.5% quantiles
-lower_bound2 <- quantiles[1]  # 2.5% quantile
-upper_bound2 <- quantiles[2]  # 97.5% quantile
+lower_bound2 = quantiles[1]  # 2.5% quantile
+upper_bound2 = quantiles[2]  # 97.5% quantile
 
 # paste them to create the 95% Confidence Interval
 cat("95% Confidence Interval for r2: [", lower_bound2, ", ", upper_bound2, "]", sep="")
@@ -216,19 +211,20 @@ cat("95% Confidence Interval for r2: [", lower_bound2, ", ", upper_bound2, "]", 
 
 # Problem 3
 
-```{r load_libs}
+```{r load_libs,include=FALSE}
 library(stats)
 library(car)
+library(modelr)
 ```
 
 ## Data cleaning
 
-```{r clean_data}
+```{r clean_data, message=FALSE}
 bw = read_csv("data/birthweight.csv")
-sum(is.na(bw)) # there's no missing value
 skimr::skim(bw)
+str(bw)
 # Convert some numeric variables to factors
-bw <- bw |>
+bw = bw |>
   mutate(
     babysex = factor(babysex, levels = c(1, 2), labels = c("male", "female")),
     frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9), labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
@@ -238,11 +234,13 @@ bw <- bw |>
 
 ```
 
+* During data cleaning, I first looked through the missing values(no missing) and the data types for each variable. I converted some categorical variables into factors.
+
 ## build up the regression model using stepwise method
 
-```{r}
-full_model <- lm(bwt ~ ., data = bw)
-stepwise_model <- step(full_model, direction = "both")
+```{r, message=FALSE, results='hide'}
+full_model = lm(bwt ~ ., data = bw)
+stepwise_model = step(full_model, direction = "both")
 summary(stepwise_model)
 
 ```
@@ -252,7 +250,7 @@ summary(stepwise_model)
 
 ```{r}
 # Add predictions and residuals to the data
-bw_diagnostic1 <- bw |>
+bw_diagnostic1 = bw |>
   add_predictions(stepwise_model) |>
   add_residuals(stepwise_model)
 
@@ -268,24 +266,27 @@ bw_diagnostic1 |> ggplot( aes(x = pred, y = resid)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red")
 
 ```
-* I first fit an initial full regression model including all potential predictors listed. Then I applied a stepwise regression approach with both direction to select a set of variables that contribute meaningfully to the model according to AIC. I drew a residual vs. fit plot, which indicates that the stepwise model's residuals spread randomly around the horizontal line at 0 (the red dashed line) and have no pattern. But I detected assumption violation of heteroscedasticity and some potential influential outliers. 
+
+* I first fit an initial full regression model including all potential predictors listed. Then I applied a stepwise regression approach with both direction to select a set of variables that contribute meaningfully to the model according to AIC. I drew a residual vs. fit plot, which indicates that the stepwise model's residuals spread randomly around the horizontal line at 0 (the red dashed line) and have no pattern. But I detected assumption violation of heteroscedasticity and some potential influential outliers. So, I tried to conducted other model diagnostics to see if I inappropriately include or miss some variables. 
 
 
 # check multicollinearity
-```{r}
-vif_results <- vif(stepwise_model) 
+```{r,message=FALSE,warning=FALSE}
+vif_results = vif(stepwise_model) 
 print(vif_results)
-cor(bw$bhead,bw$blength)
-cor(bw$delwt,bw$ppwt)
+
 # get the original bw
 bw_numeric = bw |> select(-frace,-mrace,-babysex,-malform,-bwt)
-corr_matrix = cor(bw_numeric) #delwt and ppwt have high correlation; bhead and blength have high correlation
+corr_matrix = cor(bw_numeric) 
+print(corr_matrix)
+#delwt and ppwt have high correlation; bhead and blength have high correlation
 ```
-Acorrding to the results of VIF analysis and my knowlege, there's relationship between bhead and blength,delwt and ppwt. I would like to keep bhead and ppwt in my model and delete the other two covariates.
+
+* Acorrding to the results of VIF analysis,correlation analysis and my knowlege, there's relationship between bhead and blength,delwt and ppwt. I would like to keep bhead and ppwt in my model and delete the other two covariates.
 
 ## modify the model based on my knowledge
 
-```{r}
+```{r,message=FALSE,results='hide'}
 my_model = update(stepwise_model, . ~ . - blength - delwt)
 summary(my_model)
 
@@ -296,7 +297,7 @@ summary(my_model)
 # remember to rerun previous code chunk `clean_data` to get the original bw dataframe
 
 # Add predictions and residuals to the data
-bw_diagnostic2 <- bw |>
+bw_diagnostic2 = bw |>
   add_predictions(my_model) |>
   add_residuals(my_model)
 
@@ -328,13 +329,13 @@ influencePlot(my_model)
 * Influential Points: Observations 656 and 1477 are likely influential due to their high Cook's distances. Observation 1993 could also be influential due to its very high leverage, even though it's not an outlier by the residual criterion.
 
 
-## remove point 656, 1477, 4049 from the observations
-```{r}
+## remove point 656, 1477, 4049 and 2463 from the observations
+```{r remove_outliers,message=FALSE,results='hide'}
 # remember to rerun previous code chunk `clean_data` to get the original bw dataframe
 bw = bw[-c(656,1477,4049),]
 
-full_model <- lm(bwt ~ ., data = bw)
-stepwise_model <- step(full_model, direction = "both")
+full_model = lm(bwt ~ ., data = bw)
+stepwise_model = step(full_model, direction = "both")
 my_model = update(stepwise_model, . ~ . - blength - delwt)
 summary(my_model)
 
@@ -343,14 +344,13 @@ bw = bw[-c(2463),]
 
 ```
 
-* After removing the influential points, the coefficient of fincome experienced significant change, and the direction altered(from negative value to positive value), which makes more sense given common sense.
 
 ## model diagnostics 3
 ```{r}
 # remember to rerun previous code chunk `clean_data` to get the original bw dataframe
 
 # Add predictions and residuals to the data
-bw_diagnostic3 <- bw |>
+bw_diagnostic3 = bw |>
   add_predictions(my_model) |>
   add_residuals(my_model)
 
@@ -374,7 +374,7 @@ hist(residuals)# residual is normally-distributed
 * Although there's still influential outliers, I won't remove them any longer.(removing point 2689 didn't change the model so much)
 
 ## model comparison
-```{r}
+```{r, include=FALSE}
 library(caret)
 library(purrr)
 ```
@@ -385,69 +385,56 @@ I used original bw dataframe here. But I will use the dw after deleting influent
 
 ```{r}
 set.seed(123) # for reproducibility
-folds <- crossv_mc(bw, 100) # for 100-fold cross-validation
+folds = crossv_mc(bw, 100) # for 100-fold cross-validation
 ```
 
 ### my_model
 ```{r}
 
 # given a dataframe and a formula, return a model
-fn_model <- function(df){
-  lm(bwt ~ babysex + bhead + fincome + gaweeks + mheight + mrace + ppwt + smoken, data = df)
+fn_model = function(df){
+  lm(bwt ~ babysex + bhead + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = df)
 }
 
 # get models for all resamples in train dataset 
-folds_my_model <-
-  folds %>%
-  mutate(model = map(train, fn_model)) %>%
-  print()
+folds_my_model =
+  folds |>
+  mutate(model = map(train, fn_model))
 
 
 # calculate pre, resp,resid
-sample_prediction <- function(model, sample){
-  
-  df <- as.data.frame(sample)
-  
-  pred <- stats::predict(model, df)
-  
-  
+sample_prediction = function(model, sample){
+  df = as.data.frame(sample)
+  pred = stats::predict(model, df)
 }
 
-
-
-sample_response <- function(model, sample){
-  
-  df <- as.data.frame(sample)
-  
-  var_response <- all.vars(formula(model))[[1]]
-  
+sample_response = function(model, sample){
+  df = as.data.frame(sample)
+  var_response = all.vars(formula(model))[[1]]
   df[[var_response]]
 }
 
 ####### those two functions above can be used repeatedly
 
-folds_my_resid <- 
-  folds_my_model %>%
-  gather(key = split, value = data, train, test) %>%
+folds_my_resid = 
+  folds_my_model |>
+  gather(key = split, value = data, train, test) |>
   mutate(
     pred = map2(model, data, sample_prediction),
     resp = map2(model, data, sample_response),
     resid = map2(pred, resp, `-`)
-  ) %>%
-  select(.id, split, pred, resp, resid) %>%
-  unnest(cols = c(pred, resp, resid)) %>%
-  print()
+  ) |>
+  select(.id, split, pred, resp, resid) |>
+  unnest(cols = c(pred, resp, resid))
 
 # calculate rmse
-folds_my_rmse <- 
-  folds_my_resid %>%
-  group_by(.id, split) %>%
+folds_my_rmse = 
+  folds_my_resid |>
+  group_by(.id, split) |>
   summarize(
     rmse = sqrt(sum(resid*resid)/length(resid))
-  ) %>%
-  ungroup() %>%
-  print()
-
+  ) |>
+  ungroup()
 
 ```
 
@@ -455,38 +442,35 @@ folds_my_rmse <-
 ```{r}
 
 # given a dataframe, return a model
-fn_model <- function(df){
+fn_model = function(df){
   lm(bwt ~ blength + gaweeks, data = df)
 }
 
 # get models for all resamples using train datasets
-folds_model1 <-
-  folds %>%
-  mutate(model = map(train, fn_model)) %>%
-  print()
+folds_model1 =
+  folds |>
+  mutate(model = map(train, fn_model))
 
 
-folds_one_resid <- 
-  folds_model1 %>%
-  gather(key = split, value = data, train, test) %>%
+folds_one_resid = 
+  folds_model1 |>
+  gather(key = split, value = data, train, test) |>
   mutate(
     pred = map2(model, data, sample_prediction),
     resp = map2(model, data, sample_response),
     resid = map2(pred, resp, `-`)
-  ) %>%
-  select(.id, split, pred, resp, resid) %>%
-  unnest(cols = c(pred, resp, resid)) %>%
-  print()
+  ) |>
+  select(.id, split, pred, resp, resid) |>
+  unnest(cols = c(pred, resp, resid))
 
 # calculate rmse
-folds_one_rmse <- 
-  folds_one_resid %>%
-  group_by(.id, split) %>%
+folds_one_rmse = 
+  folds_one_resid |>
+  group_by(.id, split) |>
   summarize(
     rmse = sqrt(sum(resid*resid)/length(resid))
-  ) %>%
-  ungroup() %>%
-  print()
+  ) |>
+  ungroup()
 ```
 
 ### model 2
@@ -494,42 +478,42 @@ folds_one_rmse <-
 ```{r}
 
 # given a dataframe, return a model
-fn_model <- function(df){
+fn_model = function(df){
   lm(bwt ~ bhead * blength * babysex, data = df)
 }
 
 # get models for all resamples using train datasets
-folds_model2 <-
-  folds %>%
-  mutate(model = map(train, fn_model)) %>%
-  print()
+folds_model2 =
+  folds |>
+  mutate(model = map(train, fn_model))
 
 
-folds_two_resid <- 
-  folds_model2 %>%
-  gather(key = split, value = data, train, test) %>%
+folds_two_resid = 
+  folds_model2 |>
+  gather(key = split, value = data, train, test) |>
   mutate(
     pred = map2(model, data, sample_prediction),
     resp = map2(model, data, sample_response),
     resid = map2(pred, resp, `-`)
-  ) %>%
-  select(.id, split, pred, resp, resid) %>%
-  unnest(cols = c(pred, resp, resid)) %>%
-  print()
+  ) |>
+  select(.id, split, pred, resp, resid) |>
+  unnest(cols = c(pred, resp, resid))
 
 # calculate rmse
-folds_two_rmse <- 
-  folds_two_resid %>%
-  group_by(.id, split) %>%
+folds_two_rmse = 
+  folds_two_resid |>
+  group_by(.id, split) |>
   summarize(
     rmse = sqrt(sum(resid*resid)/length(resid))
-  ) %>%
-  ungroup() %>%
-  print()
+  ) |>
+  ungroup() 
 ```
 
 ### combine the three datasets together to visualize the differences
-```{r}
+
+The thing we are interested to do is to compare the performance of models on their trianing sets with their proformance on their test sets. One way we can do this is to make qualitative assesments of the kernel density of the residuals.
+
+```{r resid,message=FALSE}
 resid = bind_rows(my_model = folds_my_resid, model1 = folds_one_resid, model2 = folds_two_resid,.id = "model") 
 
 ggplot(resid, aes(x = resid, color = split, group = paste(split, .id))) +
@@ -538,12 +522,25 @@ ggplot(resid, aes(x = resid, color = split, group = paste(split, .id))) +
     geom = "line", 
     position = "identity",
     alpha = 0.3
-  ) + facet_grid(.~model)
-  guides(color = guide_legend(override.aes = list(alpha = 1)))
+  ) + facet_grid(.~model) +
+  guides(color = guide_legend(override.aes = list(alpha = 1))) +
+  ggtitle("Kernel-density plot for each model by train and test data") +
+  xlab("Residual") + ylab("Density")
   
+```
+
+* The kernel-density estimates for the training residuals and the test residuals of the three models seem consistent one to another, indicating they
+
+
+For regression problems, We can also use the RMSE because it gives us a useful first idea of how a given model performs, and it is expressed in the same units as the response.
+```{r rmse,message=FALSE}
 rmse = bind_rows(my_model = folds_my_rmse, model1 = folds_one_rmse, model2 = folds_two_rmse,.id = "model")
 
-rmse %>%
+rmse |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin() +
+  ggtitle("Violoin plot of RMSE for three models")
+
+rmse |>
   ggplot(aes(x = model, y = rmse, color = split, group = split)) +
   stat_summary(geom = "line", fun = "median") +
   geom_point(
@@ -551,7 +548,12 @@ rmse %>%
     alpha = 0.5
   ) +
   ylim(0, NA) +
-  guides(color = guide_legend(override.aes = list(alpha = 1)))
+  guides(color = guide_legend(override.aes = list(alpha = 1))) +
+  ggtitle("RMSE for each model by train and test data")
+
 ```
 
 
+* For the violin plot, the RMSE is highest for model1 and the whisker-like shape suggests more extreme points.model 2 appears to have the lowest median RMSE, suggesting that it generally has the best fit out of the three models. However, model2 is too complex with many three-way interactions. The shape of violin shows the kernel density estimation of the RMSE for the respective model. 
+
+* For the plot showing RMSE for different models by training and testing data, the proximity of training and testing RMSE for each model indicates how well the model generalizes. model1 performs well on the training data but poorly on the testing data, indicating overfitting. my_model is best on this point.Although the thickness across scale indicates that my_model has a higher model variability, I would chose my_model as the final linear regression model, considering a balance between predicative accuracy and model complexity.
