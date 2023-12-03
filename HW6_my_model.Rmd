@@ -133,7 +133,7 @@ weather_boot_straps |>
 
 ## get estimates
 
-```{r estimates, message=FALSE}
+```{r estimates, message=FALSE,warning=FALSE}
 bootstrap_results = 
   weather_boot_straps |> 
   mutate(
@@ -202,11 +202,11 @@ cat("95% Confidence Interval for r2: [", lower_bound, ", ", upper_bound, "]", se
 quantiles2 = round(quantile(pull(bootstrap_results,log), probs = c(0.025, 0.975), na.rm= TRUE),2)
 
 # identify the 2.5% and 97.5% quantiles
-lower_bound2 = quantiles[1]  # 2.5% quantile
-upper_bound2 = quantiles[2]  # 97.5% quantile
+lower_bound2 = quantiles2[1]  # 2.5% quantile
+upper_bound2 = quantiles2[2]  # 97.5% quantile
 
 # paste them to create the 95% Confidence Interval
-cat("95% Confidence Interval for r2: [", lower_bound2, ", ", upper_bound2, "]", sep="")
+cat("95% Confidence Interval for log(beta1*beta2): [", lower_bound2, ", ", upper_bound2, "]", sep="")
 ```
 
 # Problem 3
