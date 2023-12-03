@@ -190,11 +190,9 @@ r2_dist = bootstrap_results |>
 r2_dist
 ```
 
-![](HW6_my_model_files/figure-gfm/plot-1.png)<!-- -->
+![](HW6_my_model_files/figure-gfm/q2_plot-1.png)<!-- -->
 
 ``` r
-ggsave("r2_dist.png")
-
 log_dist = bootstrap_results |>
   ggplot() +
   geom_histogram(aes(x = log), color = "red") +
@@ -202,15 +200,9 @@ log_dist = bootstrap_results |>
 log_dist
 ```
 
-    ## Warning: Removed 3439 rows containing non-finite values (`stat_bin()`).
+    ## Warning: Removed 3338 rows containing non-finite values (`stat_bin()`).
 
-![](HW6_my_model_files/figure-gfm/plot-2.png)<!-- -->
-
-``` r
-ggsave("log_dist.png")
-```
-
-    ## Warning: Removed 3439 rows containing non-finite values (`stat_bin()`).
+![](HW6_my_model_files/figure-gfm/q2_plot-2.png)<!-- -->
 
 Description for the plots:
 
@@ -263,7 +255,7 @@ upper_bound2 = quantiles2[2]  # 97.5% quantile
 cat("95% Confidence Interval for log(beta1*beta2): [", lower_bound2, ", ", upper_bound2, "]", sep="")
 ```
 
-    ## 95% Confidence Interval for log(beta1*beta2): [-9.03, -4.56]
+    ## 95% Confidence Interval for log(beta1*beta2): [-8.8, -4.54]
 
 # Problem 3
 
@@ -405,7 +397,7 @@ bw_diagnostic1 |> ggplot( aes(x = pred, y = resid)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red")
 ```
 
-![](HW6_my_model_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](HW6_my_model_files/figure-gfm/q3_model_diagnostics1-1.png)<!-- -->
 
 - I first fit an initial full regression model including all potential
   predictors listed. Then I applied a stepwise regression approach with
@@ -532,7 +524,7 @@ bw_diagnostic2 |> ggplot( aes(x = pred, y = resid)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red")
 ```
 
-![](HW6_my_model_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](HW6_my_model_files/figure-gfm/q3_model_diagnostics2-1.png)<!-- -->
 
 - According to the plot, this model seems good with no violation of
   assumption, but still have some outliers/influential points.
@@ -543,7 +535,7 @@ bw_diagnostic2 |> ggplot( aes(x = pred, y = resid)) +
 influencePlot(my_model)
 ```
 
-![](HW6_my_model_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](HW6_my_model_files/figure-gfm/p3_outlier_1-1.png)<!-- -->
 
     ##          StudRes         Hat        CookD
     ## 1     0.08093817 0.198053417 0.0001348534
@@ -611,14 +603,14 @@ bw_diagnostic3 |> ggplot( aes(x = pred, y = resid)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red")
 ```
 
-![](HW6_my_model_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](HW6_my_model_files/figure-gfm/p3_model_diagnostics3-1.png)<!-- -->
 
 ``` r
 residuals = resid(my_model)
 hist(residuals)# residual is normally-distributed
 ```
 
-![](HW6_my_model_files/figure-gfm/unnamed-chunk-8-2.png)<!-- -->
+![](HW6_my_model_files/figure-gfm/p3_model_diagnostics3-2.png)<!-- -->
 
 - Although there’s still influential outliers, I won’t remove them any
   longer.(removing point 2689 didn’t change the model so much)

@@ -2,7 +2,7 @@
 title: "my_model"
 author: "Ruixi Li"
 date: "2023-12-01"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -156,21 +156,19 @@ bootstrap_results =
 
 ## plot the distribution
 
-```{r plot, message=FALSE}
+```{r q2_plot, message=FALSE}
 
 r2_dist = bootstrap_results |>
   ggplot() +
   geom_histogram(aes(x = r_squared), color = "blue") +
   ggtitle("Distribution of R^2")
 r2_dist
-ggsave("r2_dist.png")
 
 log_dist = bootstrap_results |>
   ggplot() +
   geom_histogram(aes(x = log), color = "red") +
   ggtitle("Distribution of log(beta1*beta2)")
 log_dist
-ggsave("log_dist.png")
 ```
 
 Description for the plots:
@@ -248,7 +246,7 @@ summary(stepwise_model)
 
 ## model diagnostics1
 
-```{r}
+```{r q3_model_diagnostics1}
 # Add predictions and residuals to the data
 bw_diagnostic1 = bw |>
   add_predictions(stepwise_model) |>
@@ -279,7 +277,7 @@ print(vif_results)
 bw_numeric = bw |> select(-frace,-mrace,-babysex,-malform,-bwt)
 corr_matrix = cor(bw_numeric) 
 print(corr_matrix)
-#delwt and ppwt have high correlation; bhead and blength have high correlation
+#delwt and ppwt have high correlation; bhead and blength have high correlation;pnumlbw and pnumsga are all "0" value and should be excluded in models.
 ```
 
 * Acorrding to the results of VIF analysis,correlation analysis and my knowlege, there's relationship between bhead and blength,delwt and ppwt. I would like to keep bhead and ppwt in my model and delete the other two covariates.
@@ -293,7 +291,7 @@ summary(my_model)
 ```
 
 ## model diagnostics 2
-```{r}
+```{r q3_model_diagnostics2}
 # remember to rerun previous code chunk `clean_data` to get the original bw dataframe
 
 # Add predictions and residuals to the data
@@ -318,7 +316,7 @@ bw_diagnostic2 |> ggplot( aes(x = pred, y = resid)) +
 
 ## identify potential outliers or influential points
 
-```{r}
+```{r p3_outlier_1}
 influencePlot(my_model)
 ```
 * According to studentized residual(absolute StudRes > 2), point 656, 1477, 4049 are outliers.
@@ -340,13 +338,13 @@ my_model = update(stepwise_model, . ~ . - blength - delwt)
 summary(my_model)
 
 influencePlot(my_model)
-bw = bw[-c(2463),]
+bw = bw[-c(2463),] 
 
 ```
 
 
 ## model diagnostics 3
-```{r}
+```{r p3_model_diagnostics3}
 # remember to rerun previous code chunk `clean_data` to get the original bw dataframe
 
 # Add predictions and residuals to the data
@@ -439,7 +437,7 @@ folds_my_rmse =
 ```
 
 ### model1
-```{r}
+```{r, message=FALSE}
 
 # given a dataframe, return a model
 fn_model = function(df){
@@ -475,7 +473,7 @@ folds_one_rmse =
 
 ### model 2
 
-```{r}
+```{r, message=FALSE}
 
 # given a dataframe, return a model
 fn_model = function(df){
